@@ -1,17 +1,30 @@
-import os, requests
-# Set env vars: TELEGRAM_TOKEN (from @BotFather) and TELEGRAM_CHAT_ID
-def send_telegram(text, image_path=None):
-    token, chat = os.getenv("TELEGRAM_TOKEN"), os.getenv("TELEGRAM_CHAT_ID")
-    if not token or not chat:
+import requests
+from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
+
+def send_telegram(text: str, image_path: str = None) -> bool:
+    """
+    Sends a notification to Telegram with an optional image snapshot.
+    Credentials are read from central configuration.
+    """
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         return False
     try:
-        base = f"https://api.telegram.org/bot{token}"
+        base = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
         if image_path:
             with open(image_path, "rb") as f:
-                requests.post(f"{base}/sendPhoto", data={"chat_id": chat, "caption": text},
-                              files={"photo": f}, timeout=10)
+                res = requests.post(
+                    f"{base}/sendPhoto",
+                    data={"chat_id": TELEGRAM_CHAT_ID, "caption": text},
+                    files={"photo": f},
+                    timeout=10
+                )
+                return res.status_code == 200
         else:
-            requests.post(f"{base}/sendMessage", data={"chat_id": chat, "text": text}, timeout=10)
-        return True
+            res = requests.post(
+                f"{base}/sendMessage",
+                data={"chat_id": TELEGRAM_CHAT_ID, "text": text},
+                timeout=10
+            )
+            return res.status_code == 200
     except Exception:
         return False

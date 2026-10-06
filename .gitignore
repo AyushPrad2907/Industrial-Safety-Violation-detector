@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables & secrets
+.env
+*.env
+
+# Local database & evidence media
+violations.db
+evidence/
+*.mp4
+*.avi
+*.mov
+
+# Model weights
+*.pt
+*.onnx
+runs/
+
+# Python virtual environment
+.venv/
+venv/
+ENV/

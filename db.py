@@ -1,8 +1,9 @@
-import sqlite3, pandas as pd
-DB = "violations.db"
+import sqlite3
+import pandas as pd
+from config import DB_PATH
 
 def _conn():
-    c = sqlite3.connect(DB)
+    c = sqlite3.connect(DB_PATH)
     c.execute("""CREATE TABLE IF NOT EXISTS violations(
         id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, camera TEXT,
         type TEXT, confidence REAL, image TEXT)""")

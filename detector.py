@@ -1,8 +1,9 @@
 import cv2, os, time, numpy as np
 from datetime import datetime
 from ultralytics import YOLO
+from config import EVIDENCE_DIR
 
-os.makedirs("evidence", exist_ok=True)
+os.makedirs(EVIDENCE_DIR, exist_ok=True)
 
 class SafetyDetector:
     """Detects PPE violations (classes like 'NO-Hardhat', 'NO-Safety Vest')
@@ -46,7 +47,8 @@ class SafetyDetector:
         for name, c in found:
             if now - self.last.get(name, 0) > self.cooldown:
                 self.last[name] = now
-                path = f"evidence/{name.replace(' ', '_')}_{datetime.now():%Y%m%d_%H%M%S}.jpg"
+                filename = f"{name.replace(' ', '_')}_{datetime.now():%Y%m%d_%H%M%S}.jpg"
+                path = os.path.join(EVIDENCE_DIR, filename)
                 cv2.imwrite(path, frame)
                 new.append((name, c, path))
         return frame, new
