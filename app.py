@@ -8,6 +8,9 @@ import config
 import db
 import alerts
 from detector import SafetyDetector
+from ppe_detector import PPEDetector
+from ppe_association import WorkerPPEAssociator, PPEState
+from temporal_engine import TemporalViolationEngine, ViolationStatus
 from zone_utils import parse_zone_polygon
 from video_source import VideoSourceHandler
 
@@ -22,10 +25,19 @@ live, hist = st.tabs(["Live Detection", "Violation History"])
 
 with st.sidebar:
     st.header("⚙️ Configuration")
-    weights = st.text_input("Model weights", value=config.DEFAULT_MODEL_WEIGHTS)
+    weights = st.text_input("Person model weights", value=config.DEFAULT_MODEL_WEIGHTS)
+    ppe_weights = st.text_input("PPE model weights", value=config.DEFAULT_PPE_MODEL_WEIGHTS)
     src_type = st.radio("Source", ["Upload video", "Webcam", "RTSP / URL"])
     camera = st.text_input("Camera name", value=config.DEFAULT_CAMERA_NAME)
-    conf = st.slider("Confidence", min_value=0.1, max_value=0.9, value=config.DEFAULT_CONFIDENCE, step=0.05)
+    conf = st.slider("Person confidence", min_value=0.1, max_value=0.9, value=config.DEFAULT_CONFIDENCE, step=0.05)
+    ppe_conf = st.slider("PPE confidence", min_value=0.1, max_value=0.9, value=config.DEFAULT_PPE_CONFIDENCE, step=0.05)
+    assoc_threshold = st.slider("Association threshold", min_value=0.15, max_value=0.85, value=config.DEFAULT_ASSOCIATION_THRESHOLD, step=0.05)
+
+    st.markdown("---")
+    st.subheader("Temporal Decision Engine")
+    window_size = st.slider("Window size (frames)", min_value=5, max_value=30, value=config.DEFAULT_TEMPORAL_WINDOW_SIZE, step=1)
+    violation_ratio = st.slider("Violation ratio threshold", min_value=0.50, max_value=0.95, value=config.DEFAULT_VIOLATION_RATIO_THRESHOLD, step=0.05)
+    min_obs_frames = st.slider("Min observable frames", min_value=2, max_value=15, value=config.DEFAULT_MIN_OBSERVABLE_FRAMES, step=1)
     
     st.markdown("---")
     st.subheader("Restricted Zone")
@@ -73,16 +85,21 @@ with live:
         st.session_state.is_running = False
         st.rerun()
 
-    # Layout placeholders for telemetry, worker metrics, video view, and events
-    metric_cols = st.columns(6)
+    # Layout placeholders for telemetry, worker metrics, PPE metrics, video view, and events
+    metric_cols = st.columns(7)
     metric_active_workers = metric_cols[0].empty()
     metric_unique_workers = metric_cols[1].empty()
-    metric_fps = metric_cols[2].empty()
-    metric_frame = metric_cols[3].empty()
-    metric_res = metric_cols[4].empty()
-    metric_latency = metric_cols[5].empty()
+    metric_ppe_count = metric_cols[2].empty()
+    metric_fps = metric_cols[3].empty()
+    metric_frame = metric_cols[4].empty()
+    metric_res = metric_cols[5].empty()
+    metric_latency = metric_cols[6].empty()
 
-    view = st.empty()
+    col_view, col_status = st.columns([3, 1])
+    with col_view:
+        view = st.empty()
+    with col_status:
+        worker_ppe_panel = st.empty()
     log_box = st.empty()
 
     # Active Stream Processing Loop
@@ -102,7 +119,11 @@ with live:
         else:
             # Model existence check before initializing detector
             if not os.path.exists(weights):
-                st.error(f"Model file '{weights}' was not found. Please provide valid weights in the sidebar (e.g., 'yolov8n.pt').")
+                st.error(f"Person model file '{weights}' was not found. Please provide valid weights in the sidebar (e.g., 'yolov8n.pt').")
+                st.session_state.is_running = False
+                handler.cleanup()
+            elif not os.path.exists(ppe_weights):
+                st.error(f"PPE model file '{ppe_weights}' was not found. Please provide valid PPE weights in the sidebar (e.g., 'models/ppe_yolov8n_best.pt').")
                 st.session_state.is_running = False
                 handler.cleanup()
             else:
@@ -110,12 +131,29 @@ with live:
                     det = SafetyDetector(weights=weights, zone=parsed_zone, conf=conf, cooldown=config.DEFAULT_COOLDOWN)
                     det.reset_tracking()
                 except Exception as e:
-                    st.error(f"Error loading model '{weights}': {str(e)}")
+                    st.error(f"Error loading Person model '{weights}': {str(e)}")
                     st.session_state.is_running = False
                     handler.cleanup()
                     det = None
 
+                ppe_det = None
+                associator = None
+                temporal_engine = None
                 if det is not None:
+                    try:
+                        ppe_det = PPEDetector(weights=ppe_weights, conf=ppe_conf, device="cpu")
+                        associator = WorkerPPEAssociator(min_threshold=assoc_threshold)
+                        temporal_engine = TemporalViolationEngine(
+                            window_size=window_size,
+                            violation_ratio_threshold=violation_ratio,
+                            min_observable_frames=min_obs_frames
+                        )
+                    except Exception as e:
+                        st.error(f"Error initializing PPE & Temporal pipeline: {str(e)}")
+                        st.session_state.is_running = False
+                        handler.cleanup()
+
+                if det is not None and ppe_det is not None and associator is not None and temporal_engine is not None:
                     events = []
                     frame_count = 0
                     prev_time = time.time()
@@ -131,12 +169,41 @@ with live:
                             frame_count += 1
                             h, w = frame.shape[:2]
 
-                            # Detection & ByteTrack tracking hook
+                            # 1. Detection & ByteTrack tracking hook for workers
                             det_start = time.time()
                             frame, new, tracked_workers = det.process(frame)
-                            latency_ms = (time.time() - det_start) * 1000
+                            person_det_latency_ms = (time.time() - det_start) * 1000
 
-                            # Record new violations
+                            # 2. PPE Detection hook
+                            ppe_start = time.time()
+                            ppe_detections = ppe_det.detect(frame)
+                            frame = ppe_det.annotate(frame, ppe_detections)
+                            ppe_det_latency_ms = (time.time() - ppe_start) * 1000
+
+                            # 3. Worker <-> PPE Association hook
+                            assoc_start = time.time()
+                            assoc_res = associator.associate(
+                                workers=tracked_workers,
+                                ppe_detections=ppe_detections,
+                                frame_idx=frame_count,
+                                timestamp=time.time()
+                            )
+                            frame = associator.annotate_frame(frame, assoc_res, show_connection_lines=True)
+                            assoc_latency_ms = (time.time() - assoc_start) * 1000
+
+                            # 4. Phase 5: Temporal Violation Decision Engine
+                            temp_start = time.time()
+                            temp_res = temporal_engine.process(
+                                association_result=assoc_res,
+                                frame_idx=frame_count,
+                                timestamp=time.time()
+                            )
+                            frame = temporal_engine.annotate_frame(frame, temp_res)
+                            temp_latency_ms = (time.time() - temp_start) * 1000
+
+                            total_latency_ms = person_det_latency_ms + ppe_det_latency_ms + assoc_latency_ms + temp_latency_ms
+
+                            # Record new violations (Phase 2 zone violations preserved)
                             for name, c, path in new:
                                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 db.log(ts, camera, name, c, path)
@@ -149,20 +216,67 @@ with live:
                             fps = 1.0 / (now - prev_time) if (now - prev_time) > 0 else 0.0
                             prev_time = now
 
-                            # Update Worker & Telemetry Metrics
+                            # Update Worker, PPE, & Telemetry Metrics
                             active_workers_count = len(tracked_workers)
                             unique_workers_count = len(det.unique_track_ids)
+                            ppe_items_count = len(ppe_detections)
 
                             metric_active_workers.metric("Active Workers", f"{active_workers_count}")
                             metric_unique_workers.metric("Unique Workers", f"{unique_workers_count}")
+                            metric_ppe_count.metric("PPE Detections", f"{ppe_items_count}")
                             metric_fps.metric("FPS", f"{fps:.1f}")
                             metric_frame.metric("Frame", f"#{frame_count}")
                             metric_res.metric("Resolution", f"{w}x{h}")
-                            metric_latency.metric("Latency", f"{latency_ms:.1f} ms")
+                            metric_latency.metric("Latency", f"{total_latency_ms:.1f} ms")
 
                             # Render annotated frame
                             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                             view.image(rgb_frame, use_container_width=True)
+
+                            # Render Compact Worker PPE & Violation Status Panel
+                            status_lines = ["### 👷 Worker Safety Status"]
+                            if tracked_workers:
+                                for wkr in tracked_workers:
+                                    w_id = wkr.track_id
+                                    w_summary = temp_res.worker_summaries.get(w_id, {})
+                                    
+                                    # Check confirmed or suspected violations for worker
+                                    worker_confirmed = [v for v in temp_res.active_confirmed_violations if v.track_id == w_id]
+                                    worker_suspected = [v for v in temp_res.active_suspected_violations if v.track_id == w_id]
+
+                                    if worker_confirmed:
+                                        badge = "🔴 **VIOLATION CONFIRMED**"
+                                    elif worker_suspected:
+                                        badge = "🟡 **SUSPECTED**"
+                                    else:
+                                        badge = "🟢 **COMPLIANT**"
+
+                                    w_header = f"Worker #{w_id}" if w_id != -1 else "Worker (untracked)"
+                                    status_lines.append(f"**{w_header}** — {badge}")
+
+                                    for cat_label, cat_name in [("Helmet", "helmet"), ("Vest", "vest"), ("Gloves", "gloves"), ("Boots", "boots"), ("Goggles", "goggles")]:
+                                        cat_data = w_summary.get(cat_name, {})
+                                        st_val = cat_data.get("status", "NORMAL")
+                                        ratio = cat_data.get("missing_ratio", 0.0)
+                                        obs_cnt = cat_data.get("observable_count", 0)
+                                        miss_cnt = cat_data.get("missing_count", 0)
+                                        
+                                        if st_val == ViolationStatus.CONFIRMED.value:
+                                            icon = f"🔴 MISSING ({miss_cnt}/{obs_cnt})"
+                                        elif st_val == ViolationStatus.SUSPECTED.value:
+                                            icon = f"🟡 SUSPECTED ({miss_cnt}/{obs_cnt})"
+                                        else:
+                                            assoc_st = assoc_res.worker_statuses.get(w_id)
+                                            if assoc_st and assoc_st.get_category_state(cat_name).state == PPEState.PRESENT:
+                                                icon = "✓ PRESENT"
+                                            else:
+                                                icon = "— OK / UNKNOWN"
+
+                                        status_lines.append(f"- {cat_label}: `{icon}`")
+                                    status_lines.append("")
+                            else:
+                                status_lines.append("*No active workers in frame.*")
+                            worker_ppe_panel.markdown("\n".join(status_lines))
 
                             if events:
                                 log_box.markdown("**Recent Violations:**\n" + "\n".join([f"- {ev}" for ev in events[:5]]))
