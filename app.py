@@ -73,12 +73,14 @@ with live:
         st.session_state.is_running = False
         st.rerun()
 
-    # Layout placeholders for telemetry, video view, and events
-    metric_cols = st.columns(4)
-    metric_fps = metric_cols[0].empty()
-    metric_frame = metric_cols[1].empty()
-    metric_res = metric_cols[2].empty()
-    metric_latency = metric_cols[3].empty()
+    # Layout placeholders for telemetry, worker metrics, video view, and events
+    metric_cols = st.columns(6)
+    metric_active_workers = metric_cols[0].empty()
+    metric_unique_workers = metric_cols[1].empty()
+    metric_fps = metric_cols[2].empty()
+    metric_frame = metric_cols[3].empty()
+    metric_res = metric_cols[4].empty()
+    metric_latency = metric_cols[5].empty()
 
     view = st.empty()
     log_box = st.empty()
@@ -100,12 +102,13 @@ with live:
         else:
             # Model existence check before initializing detector
             if not os.path.exists(weights):
-                st.error(f"Model file '{weights}' was not found. Please provide valid weights in the sidebar (e.g., 'yolov8n.pt' or custom model).")
+                st.error(f"Model file '{weights}' was not found. Please provide valid weights in the sidebar (e.g., 'yolov8n.pt').")
                 st.session_state.is_running = False
                 handler.cleanup()
             else:
                 try:
                     det = SafetyDetector(weights=weights, zone=parsed_zone, conf=conf, cooldown=config.DEFAULT_COOLDOWN)
+                    det.reset_tracking()
                 except Exception as e:
                     st.error(f"Error loading model '{weights}': {str(e)}")
                     st.session_state.is_running = False
@@ -128,9 +131,9 @@ with live:
                             frame_count += 1
                             h, w = frame.shape[:2]
 
-                            # Inference and rule processing hook (preserving existing detector logic)
+                            # Detection & ByteTrack tracking hook
                             det_start = time.time()
-                            frame, new = det.process(frame)
+                            frame, new, tracked_workers = det.process(frame)
                             latency_ms = (time.time() - det_start) * 1000
 
                             # Record new violations
@@ -146,11 +149,16 @@ with live:
                             fps = 1.0 / (now - prev_time) if (now - prev_time) > 0 else 0.0
                             prev_time = now
 
-                            # Update Telemetry Metrics
+                            # Update Worker & Telemetry Metrics
+                            active_workers_count = len(tracked_workers)
+                            unique_workers_count = len(det.unique_track_ids)
+
+                            metric_active_workers.metric("Active Workers", f"{active_workers_count}")
+                            metric_unique_workers.metric("Unique Workers", f"{unique_workers_count}")
                             metric_fps.metric("FPS", f"{fps:.1f}")
                             metric_frame.metric("Frame", f"#{frame_count}")
                             metric_res.metric("Resolution", f"{w}x{h}")
-                            metric_latency.metric("Proc Latency", f"{latency_ms:.1f} ms")
+                            metric_latency.metric("Latency", f"{latency_ms:.1f} ms")
 
                             # Render annotated frame
                             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

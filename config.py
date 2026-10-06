@@ -19,7 +19,7 @@ EVIDENCE_DIR = str(BASE_DIR / os.getenv("EVIDENCE_DIR", "evidence"))
 
 # Detection & Application Defaults
 DEFAULT_CAMERA_NAME = os.getenv("DEFAULT_CAMERA_NAME", "Cam-1")
-DEFAULT_MODEL_WEIGHTS = os.getenv("DEFAULT_MODEL_WEIGHTS", "best.pt")
+DEFAULT_MODEL_WEIGHTS = os.getenv("DEFAULT_MODEL_WEIGHTS", "yolov8n.pt")
 DEFAULT_CONFIDENCE = float(os.getenv("DEFAULT_CONFIDENCE", "0.4"))
 DEFAULT_COOLDOWN = int(os.getenv("DEFAULT_COOLDOWN_SECONDS", "10"))
 
