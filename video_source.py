@@ -1,5 +1,3 @@
-
-
 import os
 import cv2
 import tempfile
@@ -25,6 +23,7 @@ class VideoSourceHandler:
             (cv2.VideoCapture, None) on success
             (None, error_message) on failure
         """
+        
         if self.src_type == "Upload video":
             if self.uploaded_file is None:
                 return None, "No video file uploaded."

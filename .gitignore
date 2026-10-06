@@ -14,10 +14,11 @@ evidence/
 *.avi
 *.mov
 
-# Model weights
+# Model weights & training runs
 *.pt
 *.onnx
 runs/
+datasets/
 
 # Python virtual environment
 .venv/
