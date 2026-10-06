@@ -6,11 +6,14 @@ from datetime import datetime
 
 import config
 import db
+import database
 import alerts
 from detector import SafetyDetector
 from ppe_detector import PPEDetector
 from ppe_association import WorkerPPEAssociator, PPEState
 from temporal_engine import TemporalViolationEngine, ViolationStatus
+from telegram_alert import TelegramAlertManager
+from violation_handler import ViolationHandler
 from zone_utils import parse_zone_polygon
 from video_source import VideoSourceHandler
 
@@ -139,6 +142,7 @@ with live:
                 ppe_det = None
                 associator = None
                 temporal_engine = None
+                violation_handler = None
                 if det is not None:
                     try:
                         ppe_det = PPEDetector(weights=ppe_weights, conf=ppe_conf, device="cpu")
@@ -148,12 +152,15 @@ with live:
                             violation_ratio_threshold=violation_ratio,
                             min_observable_frames=min_obs_frames
                         )
+                        # Phase 6: Initialize ViolationHandler with Telegram settings
+                        alert_mgr = TelegramAlertManager(enabled=send)
+                        violation_handler = ViolationHandler(alert_manager=alert_mgr)
                     except Exception as e:
                         st.error(f"Error initializing PPE & Temporal pipeline: {str(e)}")
                         st.session_state.is_running = False
                         handler.cleanup()
 
-                if det is not None and ppe_det is not None and associator is not None and temporal_engine is not None:
+                if det is not None and ppe_det is not None and associator is not None and temporal_engine is not None and violation_handler is not None:
                     events = []
                     frame_count = 0
                     prev_time = time.time()
@@ -201,9 +208,19 @@ with live:
                             frame = temporal_engine.annotate_frame(frame, temp_res)
                             temp_latency_ms = (time.time() - temp_start) * 1000
 
+                            # 5. Phase 6: Evidence Capture, SQLite Persistence & Telegram Alerts
+                            for newly_confirmed_event in temp_res.newly_emitted_events:
+                                if newly_confirmed_event.status == ViolationStatus.CONFIRMED:
+                                    vh_result = violation_handler.handle_violation(
+                                        event=newly_confirmed_event,
+                                        frame=frame
+                                    )
+                                    ts_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    events.insert(0, f"{ts_str} — {newly_confirmed_event.violation_type.value} (Worker #{newly_confirmed_event.track_id})")
+
                             total_latency_ms = person_det_latency_ms + ppe_det_latency_ms + assoc_latency_ms + temp_latency_ms
 
-                            # Record new violations (Phase 2 zone violations preserved)
+                            # Record new zone violations (Phase 2 zone violations preserved)
                             for name, c, path in new:
                                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 db.log(ts, camera, name, c, path)
@@ -288,9 +305,22 @@ with live:
                         st.session_state.is_running = False
 
 with hist:
+    st.subheader("📋 Confirmed PPE Violations (Phase 6)")
+    ppe_records = database.get_recent_violations(limit=100)
+    if ppe_records:
+        import pandas as pd
+        df_ppe = pd.DataFrame(ppe_records)
+        cols_to_show = ["timestamp", "track_id", "violation_type", "severity", "decision_score", "evidence_path", "status"]
+        existing_cols = [c for c in cols_to_show if c in df_ppe.columns]
+        st.dataframe(df_ppe[existing_cols], use_container_width=True)
+    else:
+        st.info("No confirmed PPE violations recorded yet in Phase 6 database.")
+
+    st.markdown("---")
+    st.subheader("⚠️ Legacy Restricted Zone Violations")
     df = db.history()
     if df.empty:
-        st.info("No violations recorded yet.")
+        st.info("No zone violations recorded yet.")
     else:
         c1, c2 = st.columns(2)
         c1.metric("Total violations", len(df))

@@ -9,6 +9,7 @@ __pycache__/
 
 # Local database & evidence media
 violations.db
+data/
 evidence/
 *.mp4
 *.avi

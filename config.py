@@ -33,6 +33,13 @@ DEFAULT_MIN_OBSERVABLE_FRAMES = int(os.getenv("MIN_OBSERVABLE_FRAMES", "5"))
 DEFAULT_RESOLUTION_RATIO_THRESHOLD = float(os.getenv("RESOLUTION_RATIO_THRESHOLD", "0.60"))
 DEFAULT_TRACK_HISTORY_TTL = int(os.getenv("TRACK_HISTORY_TTL", "30"))
 
+# Phase 6: Persistence, Evidence, & Alerting Configuration
+DATABASE_PATH = str(BASE_DIR / os.getenv("DATABASE_PATH", "data/violations.db"))
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", TELEGRAM_TOKEN).strip()
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+TELEGRAM_ALERTS_ENABLED = os.getenv("TELEGRAM_ALERTS_ENABLED", "false").strip().lower() in ("true", "1", "yes")
+DEFAULT_TELEGRAM_ALERT_COOLDOWN_SECONDS = int(os.getenv("TELEGRAM_ALERT_COOLDOWN_SECONDS", "60"))
+
 def has_telegram_credentials() -> bool:
     """Return True if both Telegram Token and Chat ID are configured."""
-    return bool(TELEGRAM_TOKEN and TELEGRAM_CHAT_ID)
+    return bool((TELEGRAM_BOT_TOKEN or TELEGRAM_TOKEN) and TELEGRAM_CHAT_ID)
