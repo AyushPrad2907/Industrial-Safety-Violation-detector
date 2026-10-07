@@ -1,5 +1,6 @@
 import os
 import time
+import shutil
 import asyncio
 from typing import Optional, List
 from pathlib import Path
@@ -91,18 +92,25 @@ def get_workers():
 async def upload_video(file: UploadFile = File(...)):
     """
     Receives an uploaded video file from the web client,
-    stores it in a temporary storage location, and returns the path
-    for instant playback in the monitoring pipeline.
+    streams it to disk in chunks to prevent memory exhaustion,
+    and returns the local file path for instant pipeline playback.
     """
-    suffix = Path(file.filename or "uploaded.mp4").suffix or ".mp4"
+    suffix = Path(file.filename or "uploaded.mp4").suffix.lower()
+    allowed_extensions = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
+    if suffix and suffix not in allowed_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported video format: '{suffix}'. Allowed: {', '.join(allowed_extensions)}"
+        )
+
     temp_dir = Path("data/uploads")
     temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_path = temp_dir / f"input_{int(time.time())}{suffix}"
+    temp_path = temp_dir / f"input_{int(time.time())}{suffix or '.mp4'}"
 
     try:
-        content = await file.read()
-        with open(temp_path, "wb") as f:
-            f.write(content)
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
         return {
             "status": "uploaded",
             "filename": file.filename,
@@ -158,18 +166,22 @@ def update_ppe_policy_config(req: PPEPolicyConfigRequest):
 # VIDEO STREAMING (MJPEG)
 # -----------------------------------------------------------------------------
 @router.get("/api/video/stream")
-def video_stream():
+async def video_stream():
     """
     Serves live annotated MJPEG stream from the single inference loop.
     Multiple connected frontend clients subscribe without duplicating inference.
+    Uses non-blocking async generator to avoid AnyIO threadpool starvation.
     """
-    def iter_frames():
-        while True:
-            frame_bytes = monitoring_service.latest_jpeg_frame
-            if frame_bytes:
-                yield (b"--frame\r\n"
-                       b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
-            time.sleep(0.04)  # ~25 FPS delivery cap
+    async def iter_frames():
+        try:
+            while True:
+                frame_bytes = monitoring_service.get_latest_jpeg_frame()
+                if frame_bytes:
+                    yield (b"--frame\r\n"
+                           b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
+                await asyncio.sleep(0.04)  # ~25 FPS delivery cap, non-blocking
+        except asyncio.CancelledError:
+            pass
 
     return StreamingResponse(
         iter_frames(),

@@ -89,7 +89,11 @@ export default function App() {
     }
 
     setActiveAlerts((prev) => [violationData, ...prev.slice(0, 3)]);
-    setViolations((prev) => [violationData, ...prev]);
+    setTimeout(() => {
+      setActiveAlerts((prev) => prev.filter((a) => a.event_id !== eventId));
+    }, 8000);
+
+    setViolations((prev) => [violationData, ...prev.slice(0, 199)]);
     setStats((prev) => ({
       ...prev,
       total_violations: prev.total_violations + 1,

@@ -61,10 +61,11 @@ class SafetyDetector:
             tracked_workers: List[TrackedWorker]
         """
         h, w = frame.shape[:2]
+        annotated_frame = frame.copy()
         poly = None
         if self.zone:
             poly = np.array([(int(x * w), int(y * h)) for x, y in self.zone], np.int32)
-            cv2.polylines(frame, [poly], isClosed=True, color=(0, 165, 255), thickness=2)
+            cv2.polylines(annotated_frame, [poly], isClosed=True, color=(0, 165, 255), thickness=2)
 
         # Run ByteTrack tracking with person class filtering
         results = self.model.track(
@@ -109,7 +110,7 @@ class SafetyDetector:
 
                 # Color: Red if zone violation, else Green
                 color = (0, 0, 255) if is_zone_intruded else (0, 200, 0)
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
 
                 # Worker ID and Confidence Label
                 if track_id != -1:
@@ -123,8 +124,8 @@ class SafetyDetector:
                 # Text banner background for clarity
                 (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
                 label_y = max(y1 - 6, 15)
-                cv2.rectangle(frame, (x1, label_y - th - 4), (x1 + tw + 4, label_y + 2), color, -1)
-                cv2.putText(frame, label, (x1 + 2, label_y - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                cv2.rectangle(annotated_frame, (x1, label_y - th - 4), (x1 + tw + 4, label_y + 2), color, -1)
+                cv2.putText(annotated_frame, label, (x1 + 2, label_y - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
         # Handle cooldown and evidence persistence for violations
         new_violations = []
@@ -134,7 +135,7 @@ class SafetyDetector:
                 self.last_alert_time[vname] = now
                 filename = f"{vname.replace(' ', '_')}_{datetime.now():%Y%m%d_%H%M%S}.jpg"
                 path = os.path.join(EVIDENCE_DIR, filename)
-                cv2.imwrite(path, frame)
+                cv2.imwrite(path, annotated_frame)
                 new_violations.append((vname, c, path))
 
-        return frame, new_violations, tracked_workers
+        return annotated_frame, new_violations, tracked_workers

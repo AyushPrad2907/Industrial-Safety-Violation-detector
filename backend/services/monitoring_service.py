@@ -250,6 +250,11 @@ class MonitoringService:
                 "confidence": self.ppe_confidence
             }
 
+    def get_latest_jpeg_frame(self) -> Optional[bytes]:
+        """Thread-safe retrieval of the latest encoded JPEG frame for MJPEG streaming."""
+        with self._lock:
+            return self.latest_jpeg_frame
+
     def _dispatch_async(self, coro):
         """Helper to run coroutines on the application async event loop from worker thread."""
         if self.async_loop and not self.async_loop.is_closed():
@@ -424,7 +429,9 @@ class MonitoringService:
             # Encode frame to JPEG for MJPEG stream
             success, enc = cv2.imencode(".jpg", annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
             if success:
-                self.latest_jpeg_frame = enc.tobytes()
+                frame_bytes = enc.tobytes()
+                with self._lock:
+                    self.latest_jpeg_frame = frame_bytes
 
             # Broadcast monitoring update event (throttled to ~3 times per second to save bandwidth)
             if frame_idx % 4 == 0:

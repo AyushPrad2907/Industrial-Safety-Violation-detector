@@ -8,6 +8,16 @@ export function useWebSocketMonitor({ onViolation, onUpdate }) {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
+  const onViolationRef = useRef(onViolation);
+  const onUpdateRef = useRef(onUpdate);
+
+  useEffect(() => {
+    onViolationRef.current = onViolation;
+  }, [onViolation]);
+
+  useEffect(() => {
+    onUpdateRef.current = onUpdate;
+  }, [onUpdate]);
 
   const connect = useCallback(() => {
     // Build websocket URL dynamically
@@ -26,10 +36,10 @@ export function useWebSocketMonitor({ onViolation, onUpdate }) {
       ws.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          if (payload.type === 'violation_confirmed' && onViolation) {
-            onViolation(payload.data);
-          } else if (payload.type === 'monitoring_update' && onUpdate) {
-            onUpdate(payload.data);
+          if (payload.type === 'violation_confirmed' && onViolationRef.current) {
+            onViolationRef.current(payload.data);
+          } else if (payload.type === 'monitoring_update' && onUpdateRef.current) {
+            onUpdateRef.current(payload.data);
           }
         } catch (err) {
           console.warn('Error parsing WebSocket message:', err);
@@ -50,7 +60,7 @@ export function useWebSocketMonitor({ onViolation, onUpdate }) {
       console.warn('Failed to establish WebSocket:', e);
       reconnectTimeoutRef.current = setTimeout(connect, 3000);
     }
-  }, [onViolation, onUpdate]);
+  }, []);
 
   useEffect(() => {
     connect();
