@@ -23,6 +23,7 @@ from backend.schemas.monitoring import (
     SystemStatusSchema,
     WorkerStatusSchema,
     StartMonitoringRequest,
+    PPEPolicyConfigRequest,
 )
 from backend.schemas.violation import (
     ViolationRecordSchema,
@@ -134,6 +135,24 @@ def stop_monitoring():
     """Stops the active monitoring loop."""
     monitoring_service.stop_monitoring()
     return {"status": "stopped"}
+
+@router.get("/api/config/policy")
+def get_ppe_policy_config():
+    """Returns active PPE requirement policy and sensitivity thresholds."""
+    return monitoring_service.get_ppe_policy()
+
+@router.post("/api/config/policy")
+def update_ppe_policy_config(req: PPEPolicyConfigRequest):
+    """Dynamically updates PPE compliance rules and detector confidence threshold."""
+    policy = {
+        "helmet": req.helmet,
+        "vest": req.vest,
+        "gloves": req.gloves,
+        "boots": req.boots,
+        "goggles": req.goggles
+    }
+    result = monitoring_service.update_ppe_policy(policy=policy, confidence=req.confidence)
+    return {"status": "updated", **result}
 
 # -----------------------------------------------------------------------------
 # VIDEO STREAMING (MJPEG)

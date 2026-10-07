@@ -40,3 +40,11 @@ class StartMonitoringRequest(BaseModel):
     stream_url: Optional[str] = ""
     webcam_index: int = 0
     camera_name: Optional[str] = "Cam-1"
+
+class PPEPolicyConfigRequest(BaseModel):
+    helmet: bool = True
+    vest: bool = True
+    gloves: bool = False
+    boots: bool = False
+    goggles: bool = False
+    confidence: Optional[float] = 0.25

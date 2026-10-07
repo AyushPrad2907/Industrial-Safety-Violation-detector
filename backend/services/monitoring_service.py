@@ -63,6 +63,16 @@ class MonitoringService:
         self.webcam_index: int = 0
         self.stream_url: str = ""
 
+        # Configurable PPE policy and confidence (default sensible industrial settings)
+        self.current_ppe_policy = {
+            "helmet": True,
+            "vest": True,
+            "gloves": False,
+            "boots": False,
+            "goggles": False
+        }
+        self.ppe_confidence: float = config.DEFAULT_PPE_CONFIDENCE
+
         # Find any available sample video in dataset or local folder
         self._detect_sample_video()
 
@@ -107,14 +117,15 @@ class MonitoringService:
                 )
                 self.ppe_detector = PPEDetector(
                     weights=ppe_weights,
-                    conf=config.DEFAULT_PPE_CONFIDENCE,
+                    conf=self.ppe_confidence,
                     device="cpu"
                 )
                 self.associator = WorkerPPEAssociator(min_threshold=config.DEFAULT_ASSOCIATION_THRESHOLD)
                 self.temporal_engine = TemporalViolationEngine(
                     window_size=config.DEFAULT_TEMPORAL_WINDOW_SIZE,
                     violation_ratio_threshold=config.DEFAULT_VIOLATION_RATIO_THRESHOLD,
-                    min_observable_frames=config.DEFAULT_MIN_OBSERVABLE_FRAMES
+                    min_observable_frames=config.DEFAULT_MIN_OBSERVABLE_FRAMES,
+                    required_ppe_policy=dict(self.current_ppe_policy)
                 )
                 alert_mgr = TelegramAlertManager(enabled=config.TELEGRAM_ALERTS_ENABLED)
                 self.violation_handler = ViolationHandler(alert_manager=alert_mgr)
@@ -212,6 +223,32 @@ class MonitoringService:
         """Returns current tracked worker states."""
         with self._lock:
             return list(self.current_workers)
+
+    def get_ppe_policy(self) -> Dict[str, Any]:
+        """Returns active PPE requirements and detection sensitivity."""
+        with self._lock:
+            return {
+                "policy": dict(self.current_ppe_policy),
+                "confidence": self.ppe_confidence
+            }
+
+    def update_ppe_policy(self, policy: Dict[str, bool], confidence: Optional[float] = None) -> Dict[str, Any]:
+        """Updates active PPE requirement policy and sensitivity thresholds dynamically."""
+        with self._lock:
+            for k, v in policy.items():
+                if k.lower() in self.current_ppe_policy:
+                    self.current_ppe_policy[k.lower()] = bool(v)
+            if confidence is not None:
+                self.ppe_confidence = float(np.clip(confidence, 0.05, 0.95))
+                if self.ppe_detector:
+                    self.ppe_detector.conf = self.ppe_confidence
+            if self.temporal_engine:
+                self.temporal_engine.required_ppe_policy = dict(self.current_ppe_policy)
+            logger.info(f"Updated PPE policy: {self.current_ppe_policy}, conf: {self.ppe_confidence}")
+            return {
+                "policy": dict(self.current_ppe_policy),
+                "confidence": self.ppe_confidence
+            }
 
     def _dispatch_async(self, coro):
         """Helper to run coroutines on the application async event loop from worker thread."""
