@@ -147,10 +147,35 @@ export default function App() {
       const res = await uploadVideo(file);
       setUploadedFileName(file.name);
       setUploadedFilePath(res.video_path);
+      // Auto-restart inference with newly uploaded video if already running
+      if (isRunning) {
+        await startMonitoring({
+          source_type: 'Upload video',
+          video_path: res.video_path,
+          webcam_index: 0,
+          stream_url: ''
+        });
+      }
     } catch (err) {
       alert('Upload failed: ' + err.message);
     } finally {
       setIsUploading(false);
+      // Reset input element value so uploading the same or new file triggers onChange cleanly
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveVideo = async () => {
+    setUploadedFileName('');
+    setUploadedFilePath('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    if (isRunning) {
+      await stopMonitoring();
+      setStats((prev) => ({ ...prev, pipeline_state: 'STOPPED' }));
     }
   };
 
@@ -427,13 +452,29 @@ export default function App() {
                     />
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploading || isRunning}
-                      className="px-3 py-1 bg-[#1A1A1A] hover:bg-[#262626] border border-[#333] text-white font-bold uppercase tracking-wider transition-colors"
+                      disabled={isUploading}
+                      className="px-3 py-1 bg-[#1A1A1A] hover:bg-[#262626] border border-[#333] text-white font-bold uppercase tracking-wider transition-colors cursor-pointer"
                     >
-                      {isUploading ? '[ UPLOADING VIDEO... ]' : '[ SELECT VIDEO FILE ]'}
+                      {isUploading
+                        ? '[ UPLOADING VIDEO... ]'
+                        : uploadedFileName
+                        ? '[ ↻ SELECT DIFFERENT VIDEO ]'
+                        : '[ + SELECT VIDEO FILE ]'}
                     </button>
+
+                    {uploadedFileName && (
+                      <button
+                        onClick={handleRemoveVideo}
+                        disabled={isUploading}
+                        className="px-2 py-1 bg-[#FF2A2A]/20 hover:bg-[#FF2A2A]/30 border border-[#FF2A2A]/50 text-[#FF2A2A] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                        title="Remove uploaded video"
+                      >
+                        [ ✕ REMOVE ]
+                      </button>
+                    )}
+
                     <span className="text-[#888] font-mono">
-                      {uploadedFileName ? `SELECTED: ${uploadedFileName}` : 'NO FILE SELECTED (MP4 / AVI / MOV / MKV)'}
+                      {uploadedFileName ? `ACTIVE: ${uploadedFileName}` : 'NO FILE LOADED (MP4 / AVI / MOV / MKV)'}
                     </span>
                   </div>
                 )}

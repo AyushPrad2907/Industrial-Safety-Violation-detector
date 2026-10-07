@@ -134,9 +134,9 @@ class MonitoringService:
         webcam_index: int = 0,
         stream_url: str = ""
     ) -> bool:
-        """Starts the single background inference loop."""
+        """Starts or restarts the single background inference loop with the selected source."""
         if self.is_running:
-            return True
+            self.stop_monitoring()
 
         if self.detector is None:
             if not self.initialize_models():
