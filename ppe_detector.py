@@ -58,17 +58,24 @@ class PPEDetector:
         self.model = YOLO(weights)
         self.names = {int(k): v for k, v in self.model.names.items()}
 
-    def detect(self, frame: np.ndarray) -> List[DetectedPPE]:
+    def detect(self, frame: np.ndarray, imgsz: Optional[int] = None) -> List[DetectedPPE]:
         """
         Runs PPE detection on a single frame.
 
         Returns:
             List[DetectedPPE]: List of detected PPE items with bounding boxes and confidences.
         """
+        eval_imgsz = imgsz if imgsz is not None else self.imgsz
+        h, w = frame.shape[:2]
+        # For high-definition / 4K frames (width >= 1920), ensure imgsz is at least 960 to prevent
+        # small gear (helmets, goggles) from falling below the network receptive field.
+        if imgsz is None and w >= 1920 and eval_imgsz < 960:
+            eval_imgsz = 960
+
         results = self.model.predict(
             source=frame,
             conf=self.conf,
-            imgsz=self.imgsz,
+            imgsz=eval_imgsz,
             device=self.device,
             verbose=False
         )
