@@ -9,7 +9,9 @@ import {
   uploadVideo,
   startMonitoring,
   stopMonitoring,
-  resetSession
+  resetSession,
+  fetchPolicyConfig,
+  updatePolicyConfig
 } from './services/api';
 import {
   playAlertSound,
@@ -61,6 +63,16 @@ export default function App() {
   const [webcamIndex, setWebcamIndex] = useState(0);
   const [streamUrl, setStreamUrl] = useState('');
   const fileInputRef = useRef(null);
+
+  // PPE Compliance Criteria & Sensitivity States
+  const [ppePolicy, setPpePolicy] = useState({
+    helmet: true,
+    vest: false,
+    gloves: false,
+    boots: false,
+    goggles: false,
+  });
+  const [ppeConfidence, setPpeConfidence] = useState(0.25);
 
   // WebSocket event listeners
   const handleWebSocketViolation = useCallback((violationData) => {
@@ -138,6 +150,65 @@ export default function App() {
     }, 2500);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch initial PPE policy & sensitivity settings from server
+  useEffect(() => {
+    fetchPolicyConfig()
+      .then((data) => {
+        if (data.policy) setPpePolicy(data.policy);
+        if (data.confidence !== undefined) setPpeConfidence(data.confidence);
+      })
+      .catch((e) => console.warn('Could not load policy config:', e));
+  }, []);
+
+  const handleTogglePPE = async (category) => {
+    const updatedPolicy = {
+      ...ppePolicy,
+      [category]: !ppePolicy[category]
+    };
+    setPpePolicy(updatedPolicy);
+    try {
+      await updatePolicyConfig({
+        ...updatedPolicy,
+        confidence: ppeConfidence
+      });
+    } catch (e) {
+      console.error('Failed to update PPE policy:', e);
+    }
+  };
+
+  const handleApplyPreset = async (presetName) => {
+    let newPolicy = { ...ppePolicy };
+    if (presetName === 'welding') {
+      newPolicy = { helmet: true, vest: false, boots: false, gloves: false, goggles: false };
+    } else if (presetName === 'construction') {
+      newPolicy = { helmet: true, vest: true, boots: false, gloves: false, goggles: false };
+    } else if (presetName === 'strict') {
+      newPolicy = { helmet: true, vest: true, boots: true, gloves: true, goggles: false };
+    }
+    setPpePolicy(newPolicy);
+    try {
+      await updatePolicyConfig({
+        ...newPolicy,
+        confidence: ppeConfidence
+      });
+    } catch (e) {
+      console.error('Failed to apply preset:', e);
+    }
+  };
+
+  const handleConfidenceChange = async (newConf) => {
+    const val = parseFloat(newConf);
+    setPpeConfidence(val);
+    try {
+      await updatePolicyConfig({
+        ...ppePolicy,
+        confidence: val
+      });
+    } catch (e) {
+      console.error('Failed to update confidence threshold:', e);
+    }
+  };
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -508,6 +579,108 @@ export default function App() {
                     />
                   </div>
                 )}
+              </div>
+
+              {/* PPE Compliance Specification & Sensitivity Toolbar */}
+              <div className="mt-2 p-2.5 bg-[#121212] border border-[#222] text-xs space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold tracking-wider uppercase text-[#00FF66]">
+                      /// ACTIVE SAFETY RULES:
+                    </span>
+                    <span className="text-[10px] text-[#777]">
+                      TOGGLE REQUIRED GEAR FOR CURRENT WORKSPACE
+                    </span>
+                  </div>
+
+                  {/* Profile Presets */}
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    <span className="text-[#555] uppercase font-bold">PRESETS:</span>
+                    <button
+                      onClick={() => handleApplyPreset('welding')}
+                      className="px-2 py-0.5 border border-[#333] bg-[#161616] text-[#AAA] hover:text-[#00FF66] hover:border-[#00FF66] uppercase font-bold transition-colors"
+                      title="Optimized for welding/workshop: Helmet required, Vest/Boots optional"
+                    >
+                      FABRICATION / WELDING
+                    </button>
+                    <button
+                      onClick={() => handleApplyPreset('construction')}
+                      className="px-2 py-0.5 border border-[#333] bg-[#161616] text-[#AAA] hover:text-[#00FF66] hover:border-[#00FF66] uppercase font-bold transition-colors"
+                      title="Standard construction: Helmet + Hi-Vis Vest"
+                    >
+                      CONSTRUCTION SITE
+                    </button>
+                    <button
+                      onClick={() => handleApplyPreset('strict')}
+                      className="px-2 py-0.5 border border-[#333] bg-[#161616] text-[#AAA] hover:text-[#00FF66] hover:border-[#00FF66] uppercase font-bold transition-colors"
+                      title="Strict enforcement: Helmet + Vest + Boots + Gloves"
+                    >
+                      MAXIMUM COMPLIANCE
+                    </button>
+                  </div>
+                </div>
+
+                {/* Individual PPE Requirement Checkbox Buttons */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-[11px] font-bold">
+                  {[
+                    { key: 'helmet', label: 'HARDHAT / HELMET', badge: 'CRITICAL', color: '#00FF66' },
+                    { key: 'vest', label: 'HI-VIS VEST', badge: 'HIGH', color: '#FFA500' },
+                    { key: 'boots', label: 'WORK BOOTS', badge: 'MEDIUM', color: '#38BDF8' },
+                    { key: 'gloves', label: 'SAFETY GLOVES', badge: 'MEDIUM', color: '#F472B6' },
+                    { key: 'goggles', label: 'EYE GOGGLES', badge: 'MEDIUM', color: '#C084FC' },
+                  ].map(({ key, label, badge, color }) => {
+                    const active = Boolean(ppePolicy[key]);
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => handleTogglePPE(key)}
+                        className={`flex items-center justify-between px-2 py-1 border transition-all text-left ${
+                          active
+                            ? 'border-[#00FF66] bg-[#00FF66]/10 text-white shadow-sm'
+                            : 'border-[#262626] bg-[#0A0A0A] text-[#666] hover:border-[#444]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 truncate">
+                          <span className={active ? 'text-[#00FF66]' : 'text-[#444]'}>
+                            {active ? '☑' : '☐'}
+                          </span>
+                          <span className="truncate">{label}</span>
+                        </span>
+                        <span className={`text-[8px] px-1 py-0.2 border ml-1 uppercase ${
+                          active ? 'border-[#00FF66]/40 text-[#00FF66]' : 'border-[#333] text-[#444]'
+                        }`}>
+                          {badge}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Sensitivity & Confidence Slider Sub-Row */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[#1C1C1C] text-[10px]">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#888] uppercase font-bold">AI DETECTION SENSITIVITY:</span>
+                    <input
+                      type="range"
+                      min="0.10"
+                      max="0.60"
+                      step="0.05"
+                      value={ppeConfidence}
+                      onChange={(e) => handleConfidenceChange(e.target.value)}
+                      className="accent-[#00FF66] cursor-pointer w-28"
+                    />
+                    <span className="text-[#00FF66] font-bold font-mono">
+                      {Math.round(ppeConfidence * 100)}% CONFIDENCE
+                    </span>
+                    <span className="text-[#555]">
+                      ({ppeConfidence <= 0.25 ? 'High Recall (Best for distant/4K videos)' : 'Strict Validation'})
+                    </span>
+                  </div>
+
+                  <span className="text-[#666] italic">
+                    Adaptive 4K/HD Resizer active (960px receptive field)
+                  </span>
+                </div>
               </div>
 
               {/* Video Player */}

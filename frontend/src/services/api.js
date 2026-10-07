@@ -87,3 +87,19 @@ export function getCsvExportUrl(params = {}) {
 export function getEvidenceUrl(eventId) {
   return `/api/evidence/${encodeURIComponent(eventId)}`;
 }
+
+export async function fetchPolicyConfig() {
+  const res = await fetch('/api/config/policy');
+  if (!res.ok) throw new Error('Failed to fetch policy configuration');
+  return res.json();
+}
+
+export async function updatePolicyConfig(config) {
+  const res = await fetch('/api/config/policy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config)
+  });
+  if (!res.ok) throw new Error('Failed to update policy configuration');
+  return res.json();
+}
