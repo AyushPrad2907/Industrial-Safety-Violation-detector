@@ -39,6 +39,17 @@ export async function fetchViolationById(eventId) {
   return res.json();
 }
 
+export async function uploadVideo(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch('/api/monitoring/upload', {
+    method: 'POST',
+    body: formData
+  });
+  if (!res.ok) throw new Error('Video upload failed');
+  return res.json();
+}
+
 export async function startMonitoring(payload = {}) {
   const res = await fetch('/api/monitoring/start', {
     method: 'POST',

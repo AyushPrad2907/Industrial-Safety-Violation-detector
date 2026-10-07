@@ -6,6 +6,7 @@ import {
   fetchStats,
   fetchWorkers,
   fetchViolations,
+  uploadVideo,
   startMonitoring,
   stopMonitoring,
   resetSession
@@ -51,6 +52,15 @@ export default function App() {
 
   const [activeAlerts, setActiveAlerts] = useState([]);
   const seenEventIdsRef = useRef(new Set());
+
+  // Video Source Configuration States
+  const [sourceType, setSourceType] = useState('upload'); // 'upload' | 'webcam' | 'rtsp'
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [uploadedFilePath, setUploadedFilePath] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [webcamIndex, setWebcamIndex] = useState(0);
+  const [streamUrl, setStreamUrl] = useState('');
+  const fileInputRef = useRef(null);
 
   // WebSocket event listeners
   const handleWebSocketViolation = useCallback((violationData) => {
@@ -129,9 +139,49 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const res = await uploadVideo(file);
+      setUploadedFileName(file.name);
+      setUploadedFilePath(res.video_path);
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleStart = async () => {
     try {
-      await startMonitoring({ source_type: 'sample' });
+      let mappedSource = 'sample';
+      let videoPath = '';
+
+      if (sourceType === 'upload') {
+        if (!uploadedFilePath) {
+          alert('Please select or upload a video file first.');
+          return;
+        }
+        mappedSource = 'Upload video';
+        videoPath = uploadedFilePath;
+      } else if (sourceType === 'webcam') {
+        mappedSource = 'Webcam';
+      } else if (sourceType === 'rtsp') {
+        if (!streamUrl.trim()) {
+          alert('Please enter a valid RTSP or stream URL.');
+          return;
+        }
+        mappedSource = 'RTSP / URL';
+      }
+
+      await startMonitoring({
+        source_type: mappedSource,
+        video_path: videoPath,
+        webcam_index: Number(webcamIndex) || 0,
+        stream_url: streamUrl.trim()
+      });
       setStats((prev) => ({ ...prev, pipeline_state: 'RUNNING' }));
     } catch (e) {
       alert('Start failed: ' + e.message);
@@ -325,6 +375,98 @@ export default function App() {
                 <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 ${isRunning ? 'bg-[#00FF66] text-black' : 'bg-[#333] text-[#888]'}`}>
                   {isRunning ? 'FEED: ONLINE' : 'FEED: OFFLINE'}
                 </span>
+              </div>
+
+              {/* Tactical Source Control Toolbar */}
+              <div className="mt-2.5 p-2 bg-[#080808] border border-[#222] text-xs space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1A1A1A] pb-2">
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    <span className="text-[#666] uppercase">INPUT CHANNEL:</span>
+                    <button
+                      onClick={() => setSourceType('upload')}
+                      className={`px-2 py-0.5 border text-[10px] font-bold tracking-wider uppercase transition-colors ${
+                        sourceType === 'upload'
+                          ? 'border-[#00FF66] bg-[#00FF66]/10 text-[#00FF66]'
+                          : 'border-[#333] bg-[#111] text-[#777] hover:text-white'
+                      }`}
+                    >
+                      [ 1. FILE UPLOAD ]
+                    </button>
+                    <button
+                      onClick={() => setSourceType('webcam')}
+                      className={`px-2 py-0.5 border text-[10px] font-bold tracking-wider uppercase transition-colors ${
+                        sourceType === 'webcam'
+                          ? 'border-[#00FF66] bg-[#00FF66]/10 text-[#00FF66]'
+                          : 'border-[#333] bg-[#111] text-[#777] hover:text-white'
+                      }`}
+                    >
+                      [ 2. LIVE WEBCAM ]
+                    </button>
+                    <button
+                      onClick={() => setSourceType('rtsp')}
+                      className={`px-2 py-0.5 border text-[10px] font-bold tracking-wider uppercase transition-colors ${
+                        sourceType === 'rtsp'
+                          ? 'border-[#00FF66] bg-[#00FF66]/10 text-[#00FF66]'
+                          : 'border-[#333] bg-[#111] text-[#777] hover:text-white'
+                      }`}
+                    >
+                      [ 3. RTSP / STREAM URL ]
+                    </button>
+                  </div>
+                </div>
+
+                {/* Source Specific Input Sub-Bar */}
+                {sourceType === 'upload' && (
+                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      accept="video/*"
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading || isRunning}
+                      className="px-3 py-1 bg-[#1A1A1A] hover:bg-[#262626] border border-[#333] text-white font-bold uppercase tracking-wider transition-colors"
+                    >
+                      {isUploading ? '[ UPLOADING VIDEO... ]' : '[ SELECT VIDEO FILE ]'}
+                    </button>
+                    <span className="text-[#888] font-mono">
+                      {uploadedFileName ? `SELECTED: ${uploadedFileName}` : 'NO FILE SELECTED (MP4 / AVI / MOV / MKV)'}
+                    </span>
+                  </div>
+                )}
+
+                {sourceType === 'webcam' && (
+                  <div className="flex items-center gap-3 text-[11px]">
+                    <span className="text-[#888]">WEBCAM DEVICE INDEX:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      value={webcamIndex}
+                      onChange={(e) => setWebcamIndex(e.target.value)}
+                      disabled={isRunning}
+                      className="w-16 bg-[#111] border border-[#333] px-2 py-0.5 text-white text-center font-bold focus:outline-none focus:border-[#00FF66]"
+                    />
+                    <span className="text-[#555]">(INDEX 0 = DEFAULT INTEGRATED CAMERA)</span>
+                  </div>
+                )}
+
+                {sourceType === 'rtsp' && (
+                  <div className="flex items-center gap-2 text-[11px] w-full">
+                    <span className="text-[#888] whitespace-nowrap">URL / IP STREAM:</span>
+                    <input
+                      type="text"
+                      placeholder="rtsp://192.168.1.50:554/live/ch0 or http://stream.m3u8"
+                      value={streamUrl}
+                      onChange={(e) => setStreamUrl(e.target.value)}
+                      disabled={isRunning}
+                      className="flex-1 bg-[#111] border border-[#333] px-2 py-0.5 text-white font-mono focus:outline-none focus:border-[#00FF66]"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Video Player */}

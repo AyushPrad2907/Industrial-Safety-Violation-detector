@@ -36,6 +36,7 @@ class SystemStatusSchema(BaseModel):
 
 class StartMonitoringRequest(BaseModel):
     source_type: str = "sample"  # sample, webcam, rtsp, upload
+    video_path: Optional[str] = ""
     stream_url: Optional[str] = ""
     webcam_index: int = 0
     camera_name: Optional[str] = "Cam-1"

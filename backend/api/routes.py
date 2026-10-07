@@ -4,7 +4,7 @@ import asyncio
 from typing import Optional, List
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 
 import config
@@ -86,11 +86,39 @@ def get_workers():
     workers_raw = monitoring_service.get_workers()
     return [WorkerStatusSchema(**w) for w in workers_raw]
 
+@router.post("/api/monitoring/upload")
+async def upload_video(file: UploadFile = File(...)):
+    """
+    Receives an uploaded video file from the web client,
+    stores it in a temporary storage location, and returns the path
+    for instant playback in the monitoring pipeline.
+    """
+    suffix = Path(file.filename or "uploaded.mp4").suffix or ".mp4"
+    temp_dir = Path("data/uploads")
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = temp_dir / f"input_{int(time.time())}{suffix}"
+
+    try:
+        content = await file.read()
+        with open(temp_path, "wb") as f:
+            f.write(content)
+        return {
+            "status": "uploaded",
+            "filename": file.filename,
+            "video_path": str(temp_path).replace("\\", "/")
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save uploaded video: {str(e)}"
+        )
+
 @router.post("/api/monitoring/start")
 def start_monitoring(req: StartMonitoringRequest):
     """Starts the single AI monitoring inference loop."""
     started = monitoring_service.start_monitoring(
         source_type=req.source_type,
+        video_path=req.video_path or None,
         webcam_index=req.webcam_index,
         stream_url=req.stream_url or ""
     )
