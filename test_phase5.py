@@ -198,16 +198,17 @@ class TestPhase5(unittest.TestCase):
         for f in range(1, 8):
             self.engine.process(make_association_result(1, {"helmet": PPEState.NOT_ASSOCIATED}, frame_idx=f), frame_idx=f)
 
-        # 2. Feed 7 consecutive PRESENT frames (resolves with ratio >= 60%)
+        # 2. Feed consecutive PRESENT frames (resolves with ratio >= 60%)
         res = None
+        emitted_resolutions = []
         for f in range(8, 16):
             res = self.engine.process(make_association_result(1, {"helmet": PPEState.PRESENT}, frame_idx=f), frame_idx=f)
+            emitted_resolutions.extend([e for e in res.newly_emitted_events if e.status == ViolationStatus.RESOLVED])
 
         summary = res.worker_summaries[1]["helmet"]
         self.assertEqual(summary["status"], ViolationStatus.RESOLVED.value)
-        # Verify resolution event was emitted
-        res_events = [e for e in res.newly_emitted_events if e.status == ViolationStatus.RESOLVED]
-        self.assertTrue(len(res_events) >= 0)
+        # Verify resolution event was emitted during recovery
+        self.assertGreater(len(emitted_resolutions), 0)
 
     def test_15_new_violation_after_previous_resolution(self):
         """Test 15: Once resolved, a subsequent re-violation emits a fresh confirmed event."""

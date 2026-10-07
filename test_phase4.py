@@ -194,5 +194,30 @@ class TestPhase4(unittest.TestCase):
         annotated = self.associator.annotate_frame(frame, result)
         self.assertEqual(annotated.shape, frame.shape)
 
+    def test_negative_class_no_helmet_association(self):
+        """AI Enhancement: Explicit negative detection (no_helmet) confirms absence."""
+        worker = TrackedWorker(track_id=1, bbox=(100, 100, 200, 300), confidence=0.90)
+        # Bare head detected where helmet should be
+        no_h = DetectedPPE(class_id=7, class_name="no_helmet", confidence=0.89, bbox=(130, 95, 170, 140))
+
+        result = self.associator.associate([worker], [no_h])
+
+        status = result.worker_statuses[1]
+        self.assertEqual(status.helmet.state, PPEState.NOT_ASSOCIATED)
+        self.assertTrue(status.helmet.negative_detected)
+        self.assertEqual(status.helmet.matched_item, no_h)
+        self.assertIn("Explicit absence confirmed", status.helmet.reason)
+
+    def test_negative_class_no_goggle_overrides_unknown(self):
+        """AI Enhancement: Explicit no_goggle overrides UNKNOWN small-gear state."""
+        worker = TrackedWorker(track_id=1, bbox=(100, 100, 200, 300), confidence=0.90)
+        no_g = DetectedPPE(class_id=8, class_name="no_goggle", confidence=0.82, bbox=(135, 120, 165, 145))
+
+        result = self.associator.associate([worker], [no_g])
+
+        status = result.worker_statuses[1]
+        self.assertEqual(status.goggles.state, PPEState.NOT_ASSOCIATED)
+        self.assertTrue(status.goggles.negative_detected)
+
 if __name__ == "__main__":
     unittest.main()

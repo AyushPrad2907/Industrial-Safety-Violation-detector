@@ -9,7 +9,7 @@
 [![Vite](https://img.shields.io/badge/Vite-8.0-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-00FFFF?style=for-the-badge&logo=yolo&logoColor=black)](https://ultralytics.com)
-[![Tests](https://img.shields.io/badge/Tests-110%20Passed-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#-testing--qa-verification)
+[![Tests](https://img.shields.io/badge/Tests-112%20Passed-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#-testing--qa-verification)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
 <br/>
@@ -292,20 +292,20 @@ python -m unittest discover -s . -p "test_phase*.py"
 ```
 
 ```
-..............................................................................................................
+................................................................................................................
 ----------------------------------------------------------------------
-Ran 110 tests in 5.25s
+Ran 112 tests in 3.28s
 
 OK
 ```
 
 ### Coverage by Phase:
-- **Phase 1** (`test_phase1.py`): Polygon zone geometry parsing & video source handling (12 tests)
+- **Phase 1** (`test_phase1.py`): Polygon zone geometry parsing & video source handling (7 tests)
 - **Phase 2** (`test_phase2.py`): ByteTrack worker tracking & tracker structures (6 tests)
-- **Phase 3** (`test_phase3.py`): PPE YOLOv8 inference & annotation formatting (5 tests)
-- **Phase 4** (`test_phase4.py`): Worker ↔ PPE bipartite spatial association (17 tests)
-- **Phase 5** (`test_phase5.py`): Sliding-window temporal engine & debouncing (16 tests)
-- **Phase 6** (`test_phase6.py`): Evidence crop generation, SQLite logging & Telegram rate limits (20 tests)
+- **Phase 3** (`test_phase3.py`): PPE YOLOv8 inference & annotation formatting (6 tests)
+- **Phase 4** (`test_phase4.py`): Worker ↔ PPE bipartite spatial association & negative class detection (15 tests)
+- **Phase 5** (`test_phase5.py`): Sliding-window temporal engine, debouncing & recovery verification (22 tests)
+- **Phase 6** (`test_phase6.py`): Evidence crop generation, SQLite logging & Telegram rate limits (22 tests)
 - **Phase 7** (`test_phase7.py`): Streamlit dashboard utilities, CSV export & safe session reset (18 tests)
 - **Phase 8** (`test_phase8.py`): FastAPI REST endpoints, WebSockets, evidence security & regression (16 tests)
 

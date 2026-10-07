@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from zone_utils import parse_zone_polygon
 from video_source import VideoSourceHandler
@@ -94,12 +95,24 @@ class TestPhase1(unittest.TestCase):
         self.assertFalse(os.path.exists(created_temp))
 
     def test_database_logging_and_history(self):
-        db.log("2026-10-06 12:00:00", "Cam-Test", "TestViolation", 0.95, "evidence/test.jpg")
-        df = db.history()
-        self.assertFalse(df.empty)
-        row = df.iloc[0]
-        self.assertEqual(row["camera"], "Cam-Test")
-        self.assertEqual(row["type"], "TestViolation")
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            temp_db = tmp.name
+        try:
+            with patch.object(config, "DATABASE_PATH", temp_db), \
+                 patch.object(config, "DB_PATH", temp_db), \
+                 patch.object(db, "DB_PATH", temp_db):
+                db.log("2026-10-06 12:00:00", "Cam-Test", "TestViolation", 0.95, "evidence/test.jpg")
+                df = db.history()
+                self.assertFalse(df.empty)
+                row = df.iloc[0]
+                self.assertEqual(row["camera"], "Cam-Test")
+                self.assertEqual(row["type"], "TestViolation")
+        finally:
+            if os.path.exists(temp_db):
+                try:
+                    os.remove(temp_db)
+                except OSError:
+                    pass
 
     def test_alerts_without_token(self):
         # Should gracefully return False if credentials are blank or unset

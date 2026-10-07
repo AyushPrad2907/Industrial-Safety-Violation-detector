@@ -39,6 +39,14 @@ class AssociatedItem:
     confidence_level: ConfidenceLevel
     normalized_rel_pos: Tuple[float, float]  # (rel_x, rel_y) inside worker bbox
 
+# Map of negative detection classes to their target equipment category
+NEGATIVE_CLASS_MAP: Dict[str, str] = {
+    "no_helmet": "helmet",
+    "no_goggle": "goggles",
+    "no_gloves": "gloves",
+    "no_boots": "boots",
+}
+
 @dataclass
 class WorkerPPEItemState:
     """State of a specific PPE category (e.g. helmet, vest) for a tracked worker."""
@@ -48,6 +56,8 @@ class WorkerPPEItemState:
     confidence_level: ConfidenceLevel = ConfidenceLevel.NONE
     matched_item: Optional[DetectedPPE] = None
     reason: str = "Initial state"
+    negative_detected: bool = False
+    negative_confidence: float = 0.0
 
 @dataclass
 class WorkerPPEStatus:
@@ -173,7 +183,8 @@ class WorkerPPEAssociator:
         rel_y = (p_cy - wy1) / float(w_height)
 
         cls_key = ppe_class.lower()
-        prior = self.BODY_REGION_PRIORS.get(cls_key)
+        target_category = NEGATIVE_CLASS_MAP.get(cls_key, cls_key)
+        prior = self.BODY_REGION_PRIORS.get(target_category)
 
         # Fallback if class not in explicit dictionary
         if prior is None:
@@ -247,10 +258,10 @@ class WorkerPPEAssociator:
                 association_matrix={w.track_id: [] for w in workers}
             )
 
-        # Filter relevant PPE classes (skip raw 'person' or 'none' classes if present)
+        # Filter relevant PPE classes (both positive and negative gear indicators)
         relevant_ppe = [
             (idx, ppe) for idx, ppe in enumerate(ppe_detections)
-            if ppe.class_name.lower() in self.BODY_REGION_PRIORS
+            if ppe.class_name.lower() in self.BODY_REGION_PRIORS or ppe.class_name.lower() in NEGATIVE_CLASS_MAP
         ]
 
         # Calculate all candidate pairs (score, ppe_index, worker_id, rel_pos)
@@ -303,16 +314,21 @@ class WorkerPPEAssociator:
             items = worker_assignments[w.track_id]
             w_status.associated_items = items
 
-            # Group items by class category and pick best match per category
+            # Separate positive and negative items by target equipment category
             cat_groups: Dict[str, List[AssociatedItem]] = {}
+            neg_groups: Dict[str, List[AssociatedItem]] = {}
             for item in items:
-                cat_key = item.item.class_name.lower()
-                cat_groups.setdefault(cat_key, []).append(item)
+                raw_cls = item.item.class_name.lower()
+                if raw_cls in NEGATIVE_CLASS_MAP:
+                    target_cat = NEGATIVE_CLASS_MAP[raw_cls]
+                    neg_groups.setdefault(target_cat, []).append(item)
+                else:
+                    cat_groups.setdefault(raw_cls, []).append(item)
 
             for category in ["helmet", "vest", "gloves", "boots", "goggles"]:
                 item_state = getattr(w_status, category)
                 if category in cat_groups and cat_groups[category]:
-                    # Select the item with the highest association score for this category
+                    # Positive gear item detected and associated
                     best = max(cat_groups[category], key=lambda x: x.association_score)
                     item_state.state = PPEState.PRESENT
                     item_state.detection_confidence = best.item.confidence
@@ -320,6 +336,17 @@ class WorkerPPEAssociator:
                     item_state.confidence_level = best.confidence_level
                     item_state.matched_item = best.item
                     item_state.reason = f"Associated with score {best.association_score:.2f} ({best.confidence_level.value})"
+                elif category in neg_groups and neg_groups[category]:
+                    # Explicit negative class detected (e.g. no_helmet, no_goggle, no_gloves, no_boots)
+                    best_neg = max(neg_groups[category], key=lambda x: x.association_score)
+                    item_state.state = PPEState.NOT_ASSOCIATED
+                    item_state.negative_detected = True
+                    item_state.negative_confidence = best_neg.item.confidence
+                    item_state.detection_confidence = best_neg.item.confidence
+                    item_state.association_confidence = best_neg.association_score
+                    item_state.confidence_level = best_neg.confidence_level
+                    item_state.matched_item = best_neg.item
+                    item_state.reason = f"Explicit absence confirmed: '{best_neg.item.class_name}' ({best_neg.item.confidence:.2f})"
                 else:
                     # Item not detected or not associated
                     wx1, wy1, wx2, wy2 = w.bbox

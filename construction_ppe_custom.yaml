@@ -1,4 +1,4 @@
-path: E:/CodingPlayground/Industrial safety violatiion detetor/datasets/construction-ppe
+path: datasets/construction-ppe
 train: images/train
 val: images/val
 test: images/test
