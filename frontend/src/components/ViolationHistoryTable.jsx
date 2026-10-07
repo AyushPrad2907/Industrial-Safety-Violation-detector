@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Download, RefreshCw, Filter, Image, AlertCircle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { getCsvExportUrl, getEvidenceUrl } from '../services/api';
 
 export function ViolationHistoryTable({ violations, onRefresh, loading }) {
@@ -8,12 +7,10 @@ export function ViolationHistoryTable({ violations, onRefresh, loading }) {
   const [selectedWorker, setSelectedWorker] = useState('All');
   const [expandedRow, setExpandedRow] = useState(null);
 
-  // Derive unique workers from current violation set
   const workerOptions = ['All', ...new Set(violations.map((v) => String(v.track_id)))].sort();
   const typeOptions = ['All', 'Missing Helmet', 'Missing Vest', 'Missing Gloves', 'Missing Boots', 'Missing Goggles'];
   const severityOptions = ['All', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 
-  // Client-side filtering for immediate snappy responsiveness
   const filteredViolations = violations.filter((v) => {
     if (selectedSeverity !== 'All' && v.severity.toUpperCase() !== selectedSeverity) return false;
     if (selectedType !== 'All' && v.violation_type.toLowerCase() !== selectedType.toLowerCase()) return false;
@@ -32,48 +29,49 @@ export function ViolationHistoryTable({ violations, onRefresh, loading }) {
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-      {/* Table Header & Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800">
+    <div className="bg-[#0A0A0A] border border-[#222] font-mono text-xs">
+      {/* Title & Action Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between p-4 border-b border-[#222] gap-3 bg-[#0D0D0D]">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            📋 Confirmed Violation History
-          </h2>
-          <p className="text-sm text-slate-400">
-            SQLite persisted safety violations from Phase 6 temporal engine
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 bg-[#FF2A2A]"></span>
+            <h2 className="text-sm font-bold tracking-widest uppercase text-white">
+              [ LOG // CONFIRMED SAFETY VIOLATIONS ]
+            </h2>
+          </div>
+          <p className="text-[11px] text-[#666] mt-0.5">
+            SQLITE RECORD STORE • EVIDENCE CAPTURE ARCHIVE
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium transition-colors border border-slate-700"
+            className="px-3 py-1.5 bg-[#141414] hover:bg-[#202020] text-[#CCC] border border-[#333] tracking-wider uppercase transition-colors"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            {loading ? '[ SYNCING... ]' : '[ REFRESH ]'}
           </button>
           <a
             href={exportUrl}
             download="violation_history.csv"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors shadow-lg shadow-indigo-600/20"
+            className="px-3.5 py-1.5 bg-[#FF2A2A] hover:bg-[#E01E1E] text-black font-bold tracking-wider uppercase transition-colors"
           >
-            <Download className="w-4 h-4" />
-            Download CSV
+            EXPORT CSV &gt;&gt;
           </a>
         </div>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 bg-slate-950/40 px-4 rounded-lg my-4 border border-slate-800/60">
+      {/* Filter Parameters Strip */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-[#080808] border-b border-[#222]">
         <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5" /> Severity Filter
+          <label className="block text-[10px] text-[#777] mb-1 uppercase tracking-wider">
+            FILTER: SEVERITY
           </label>
           <select
             value={selectedSeverity}
             onChange={(e) => setSelectedSeverity(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-[#111] border border-[#333] px-2.5 py-1 text-xs text-white focus:outline-none focus:border-[#FF2A2A]"
           >
             {severityOptions.map((s) => (
               <option key={s} value={s}>{s}</option>
@@ -82,13 +80,13 @@ export function ViolationHistoryTable({ violations, onRefresh, loading }) {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5" /> Violation Type
+          <label className="block text-[10px] text-[#777] mb-1 uppercase tracking-wider">
+            FILTER: VIOLATION TYPE
           </label>
           <select
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-[#111] border border-[#333] px-2.5 py-1 text-xs text-white focus:outline-none focus:border-[#FF2A2A]"
           >
             {typeOptions.map((t) => (
               <option key={t} value={t}>{t}</option>
@@ -97,138 +95,116 @@ export function ViolationHistoryTable({ violations, onRefresh, loading }) {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5" /> Worker ID
+          <label className="block text-[10px] text-[#777] mb-1 uppercase tracking-wider">
+            FILTER: TARGET WORKER
           </label>
           <select
             value={selectedWorker}
             onChange={(e) => setSelectedWorker(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-[#111] border border-[#333] px-2.5 py-1 text-xs text-white focus:outline-none focus:border-[#FF2A2A]"
           >
             {workerOptions.map((w) => (
-              <option key={w} value={w}>{w === 'All' ? 'All Workers' : `Worker #${w}`}</option>
+              <option key={w} value={w}>{w === 'All' ? 'ALL TRACKED WORKERS' : `WORKER #${w}`}</option>
             ))}
           </select>
         </div>
       </div>
 
-      <div className="text-xs text-slate-400 mb-3 px-1">
-        Showing <strong className="text-white">{filteredViolations.length}</strong> of{' '}
-        <strong className="text-white">{violations.length}</strong> recorded violations
+      {/* Summary status line */}
+      <div className="px-4 py-2 text-[11px] text-[#666] border-b border-[#1A1A1A] flex justify-between">
+        <span>ENTRIES: <strong className="text-white">{filteredViolations.length}</strong> / {violations.length} TOTAL</span>
+        <span>AUDIT STATE: ACTIVE</span>
       </div>
 
-      {/* Violations Table */}
+      {/* Table */}
       {filteredViolations.length === 0 ? (
-        <div className="text-center py-12 text-slate-500 bg-slate-950/20 rounded-xl border border-dashed border-slate-800">
-          <CheckCircle2 className="w-12 h-12 text-emerald-500/50 mx-auto mb-3" />
-          <p className="text-base font-medium text-slate-300">No violations match the selected filters.</p>
-          <p className="text-xs text-slate-500 mt-1">Adjust filters or start monitoring to observe live violations.</p>
+        <div className="p-12 text-center text-[#555] bg-[#070707]">
+          [ NO VIOLATION RECORDS MATCH CURRENT AUDIT PARAMETERS ]
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-800">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950 text-xs uppercase text-slate-400 border-b border-slate-800 font-semibold">
-              <tr>
-                <th className="px-4 py-3">Timestamp</th>
-                <th className="px-4 py-3">Worker ID</th>
-                <th className="px-4 py-3">Violation</th>
-                <th className="px-4 py-3">Severity</th>
-                <th className="px-4 py-3">Score</th>
-                <th className="px-4 py-3">Zone</th>
-                <th className="px-4 py-3 text-right">Evidence</th>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#111] text-[10px] tracking-wider uppercase text-[#888] border-b border-[#222]">
+                <th className="py-2.5 px-3">TIMESTAMP</th>
+                <th className="py-2.5 px-3">WORKER ID</th>
+                <th className="py-2.5 px-3">VIOLATION TYPE</th>
+                <th className="py-2.5 px-3">SEVERITY</th>
+                <th className="py-2.5 px-3">SCORE</th>
+                <th className="py-2.5 px-3">ZONE</th>
+                <th className="py-2.5 px-3 text-right">EVIDENCE</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-normal">
+            <tbody className="divide-y divide-[#181818]">
               {filteredViolations.map((v) => {
                 const isCrit = v.severity === 'CRITICAL';
                 const isHigh = v.severity === 'HIGH';
-                const sevBadge = isCrit
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                const sevClass = isCrit
+                  ? 'text-[#FF2A2A] font-bold'
                   : isHigh
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                  : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
+                  ? 'text-[#EAB308] font-bold'
+                  : 'text-[#888]';
 
                 const isExpanded = expandedRow === v.event_id;
 
                 return (
                   <React.Fragment key={v.event_id}>
-                    <tr className="hover:bg-slate-800/40 transition-colors">
-                      <td className="px-4 py-3 text-xs font-mono text-slate-400">{v.timestamp}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-100">Worker #{v.track_id}</td>
-                      <td className="px-4 py-3 font-medium text-slate-200">{v.violation_type}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border ${sevBadge}`}>
-                          {v.severity}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs font-mono">{v.decision_score}</td>
-                      <td className="px-4 py-3 text-xs">
+                    <tr className="hover:bg-[#121212] transition-colors">
+                      <td className="py-2.5 px-3 text-[#777]">{v.timestamp}</td>
+                      <td className="py-2.5 px-3 font-bold text-white">W-{String(v.track_id).padStart(2, '0')}</td>
+                      <td className="py-2.5 px-3 text-[#DDD]">{v.violation_type}</td>
+                      <td className={`py-2.5 px-3 ${sevClass}`}>[{v.severity}]</td>
+                      <td className="py-2.5 px-3 text-[#888]">{v.decision_score}</td>
+                      <td className="py-2.5 px-3">
                         {v.is_zone_violation ? (
-                          <span className="text-rose-400 font-bold">YES</span>
+                          <span className="text-[#FF2A2A] font-bold">YES</span>
                         ) : (
-                          <span className="text-slate-500">NO</span>
+                          <span className="text-[#444]">NO</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="py-2.5 px-3 text-right">
                         <button
                           onClick={() => toggleExpand(v.event_id)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-medium text-indigo-300 transition-colors border border-slate-700"
+                          className="px-2 py-0.5 bg-[#1C1C1C] hover:bg-[#2A2A2A] text-[#CCC] border border-[#333] text-[10px] uppercase tracking-wider"
                         >
-                          <Image className="w-3.5 h-3.5" />
-                          <span>Preview</span>
-                          {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          {isExpanded ? '[-] HIDE' : '[+] VIEW'}
                         </button>
                       </td>
                     </tr>
 
-                    {/* Expandable Evidence Row */}
+                    {/* Evidence Drawer */}
                     {isExpanded && (
-                      <tr className="bg-slate-950/60 border-t border-b border-indigo-950/50">
-                        <td colSpan={7} className="px-6 py-4">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-                            {/* Evidence Image */}
-                            <div className="md:col-span-1 rounded-xl overflow-hidden border border-slate-700/80 bg-black/60 shadow-lg">
+                      <tr className="bg-[#050505] border-y border-[#262626]">
+                        <td colSpan={7} className="p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border border-[#222] p-3 bg-[#0A0A0A]">
+                            <div className="md:col-span-1 border border-[#333] bg-black">
                               <img
                                 src={getEvidenceUrl(v.event_id)}
-                                alt={`Evidence for ${v.event_id}`}
-                                className="w-full h-auto object-cover"
+                                alt={`Evidence ${v.event_id}`}
+                                className="w-full h-auto block"
                                 onError={(e) => {
                                   e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
+                                  e.target.nextSibling.style.display = 'block';
                                 }}
                               />
                               <div
                                 style={{ display: 'none' }}
-                                className="p-8 text-center flex-col items-center justify-center text-amber-400 text-xs gap-2"
+                                className="p-6 text-center text-[#FF2A2A] text-[11px]"
                               >
-                                <AlertCircle className="w-8 h-8 text-amber-500 mx-auto" />
-                                <span>Evidence file unavailable.</span>
+                                [ EVIDENCE FILE UNAVAILABLE ]
                               </div>
                             </div>
 
-                            {/* Evidence Metadata Details */}
-                            <div className="md:col-span-2 space-y-2 text-xs">
-                              <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 grid grid-cols-2 gap-2">
-                                <div>
-                                  <span className="text-slate-500">Event ID:</span>
-                                  <p className="font-mono text-slate-200">{v.event_id}</p>
-                                </div>
-                                <div>
-                                  <span className="text-slate-500">Decision Score:</span>
-                                  <p className="font-mono text-rose-300">{v.decision_score}</p>
-                                </div>
-                                <div>
-                                  <span className="text-slate-500">Missing Ratio:</span>
-                                  <p className="font-mono text-slate-200">{(v.missing_ratio * 100).toFixed(0)}%</p>
-                                </div>
-                                <div>
-                                  <span className="text-slate-500">Observable Frames:</span>
-                                  <p className="font-mono text-slate-200">{v.observable_frames}</p>
-                                </div>
+                            <div className="md:col-span-2 space-y-2 text-[11px]">
+                              <div className="border border-[#222] p-2.5 bg-[#080808] grid grid-cols-2 gap-2 text-[#888]">
+                                <div>EVENT ID: <span className="text-white font-mono">{v.event_id}</span></div>
+                                <div>DECISION SCORE: <span className="text-[#FF2A2A] font-mono">{v.decision_score}</span></div>
+                                <div>MISSING RATIO: <span className="text-white font-mono">{(v.missing_ratio * 100).toFixed(0)}%</span></div>
+                                <div>FRAMES OBSERVED: <span className="text-white font-mono">{v.observable_frames}</span></div>
                               </div>
-                              <p className="text-slate-400 italic bg-slate-900/60 p-2.5 rounded border border-slate-800">
+                              <div className="border border-[#222] p-2 bg-[#080808] text-[#AAA] italic">
                                 "{v.message}"
-                              </p>
+                              </div>
                             </div>
                           </div>
                         </td>
